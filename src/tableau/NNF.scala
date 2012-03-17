@@ -19,15 +19,15 @@ object NNF {
     case Exists(r, c) => Exists(r, nnf(c))
     case Not(Exists(r, c)) => ForAll(r, nnf(Not(c)))
     
-    case maxCardinality(n, r, f) => maxCardinality(n, r, nnf(f))
-    case Not(maxCardinality(n, r, f)) => minCardinality(n+1, r, nnf(f))
+    case maxCardinality(n, r) => maxCardinality(n, r)
+    case Not(maxCardinality(n, r)) => minCardinality(n+1, r)
     
-    case minCardinality(n, r, f) => 
-      if (n >= 1) minCardinality(n, r, nnf(f))
+    case minCardinality(n, r) => 
+      if (n >= 1) minCardinality(n, r)
       else if (n == 0) Top
       else println("[ERROR] untreated: " + expr); null
-    case Not(minCardinality(n, r, f)) => 
-      if (n >= 1) maxCardinality(n-1, r, nnf(f))
+    case Not(minCardinality(n, r)) => 
+      if (n >= 1) maxCardinality(n-1, r)
       else if (n == 0) Bottom
       else println("[ERROR] untreated: " + expr); null  
 

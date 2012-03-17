@@ -3,7 +3,7 @@ package test
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-
+import tableau.Internalization.internalize
 import tableau._
 
 class optimizedTableauTest {
@@ -112,10 +112,18 @@ class optimizedTableauTest {
     assertTrue(tableauR._1)
   }
 
-    @Test def testInternalization2() {
+  @Test def testInternalization2() {
     val onto : Set[Axiom] = Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("a")))
     val axiom  = EquivalentClass(Concept("a"), Concept("b"))
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)
+    assertTrue(tableauR._1)
+  }
+  
+    
+   @Test def testmaxCardinality() {
+    val onto : Set[Axiom] = Set(EquivalentClass(Concept("Job1"), Not(Concept("Job2"))))
+    val axiom  = maxCardinality(1, Role("hatVollZeitJob")) and Exists(Role("hatVollZeitJob"), Concept("Job1")) and Exists(Role("hatVollZeitJob"), Concept("Job2"))
+    val tableauR = new OptimizedTableau().isSatisfiable(internalize(onto) and axiom)
     assertTrue(tableauR._1)
   }
   

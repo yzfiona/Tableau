@@ -15,6 +15,4 @@ object Internalization {
     return internalizedExpression
   }
 
-  def internalize(expr: Axiom, axioms: Set[Axiom]): Expr = internalize(axioms + expr)
-
 }
