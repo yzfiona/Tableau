@@ -25,13 +25,13 @@ object NNF {
     case minCardinality(n, r) => 
       if (n >= 1) minCardinality(n, r)
       else if (n == 0) Top
-      else println("[ERROR] untreated: " + expr); null
+      else {println("[ERROR] untreated: " + expr); null}
     case Not(minCardinality(n, r)) => 
       if (n >= 1) maxCardinality(n-1, r)
       else if (n == 0) Bottom
-      else println("[ERROR] untreated: " + expr); null  
+      else {println("[ERROR] untreated: " + expr); null}  
 
-    case _ => println("[ERROR] untreated: " + expr); null
+    case _ => {println("[ERROR] untreated: " + expr); null}
   }
 
   def main(args: Array[String]): Unit = {

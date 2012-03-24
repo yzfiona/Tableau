@@ -8,7 +8,7 @@ import tableau._
 
 class optimizedTableauTest {
 
-  @Test def testModell1() {
+  /*@Test def testModell1() {
     val expr: Expr =
       And(List(Concept("A"), ForAll(Role("R"), Not(Concept("A"))), Exists(Role("R"), Concept("B"))))
     val tableauR = new OptimizedTableau().isSatisfiable(expr)
@@ -118,13 +118,34 @@ class optimizedTableauTest {
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)
     assertTrue(tableauR._1)
   }
-  
     
    @Test def testmaxCardinality() {
     val onto : Set[Axiom] = Set(EquivalentClass(Concept("Job1"), Not(Concept("Job2"))))
     val axiom  = maxCardinality(1, Role("hatVollZeitJob")) and Exists(Role("hatVollZeitJob"), Concept("Job1")) and Exists(Role("hatVollZeitJob"), Concept("Job2"))
     val tableauR = new OptimizedTableau().isSatisfiable(internalize(onto) and axiom)
     assertTrue(tableauR._1)
-  }
+  }*/
+   
+   @Test def testminCardinality1(){
+      val expr: Expr =
+      And(List(Concept("A"), ForAll(Role("R"),Not(Concept("A"))), minCardinality(1, Role("R"))))
+    val tableauR = new OptimizedTableau().isSatisfiable(expr)
+    val result: Set[Set[Axiom]] = Set(Set(
+      TypeAssertion(Ind("x1"), And(List(Concept("A"), ForAll(Role("R"),Not(Concept("A"))), minCardinality(1, Role("R"))))),
+      TypeAssertion(Ind("x1"), Concept("A")),
+      TypeAssertion(Ind("x1"), ForAll(Role("R"),Not(Concept("A")))),
+      TypeAssertion(Ind("x1"), minCardinality(1, Role("R"))),
+      RoleAssertion(Role("R"), Ind("x1"), Ind("x2")),
+      TypeAssertion(Ind("x2"), Not(Concept("A")))
+    ))
+    assertEquals(tableauR._2, result)
+   }
+   
+   @Test def testminCardinality2(){
+      val expr: Expr =
+      And(List(ForAll(Role("R"),Not(Concept("A"))), minCardinality(1, Role("R")), Exists(Role("R"), Concept("A"))))
+    val tableauR = new OptimizedTableau().isSatisfiable(expr)
+    assertTrue(tableauR._1)
+   }
   
 }

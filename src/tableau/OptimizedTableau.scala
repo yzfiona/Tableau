@@ -56,8 +56,14 @@ class OptimizedTableau {
         newSet = newSet.updated(e._1, true)
       }
       //build the test set which doesn't contain or and maxCardinality
-      untestedSet = newSet.filter(e ⇒ e._2 == false && e._1.isInstanceOf[TypeAssertion] 
-      && !e._1.asInstanceOf[TypeAssertion].expr.isInstanceOf[Or] && !e._1.asInstanceOf[TypeAssertion].expr.isInstanceOf[maxCardinality])
+      untestedSet = newSet.filter(e ⇒ e._2 == false && 
+    		  					 (e._1 match {
+    		  						case TypeAssertion(_, Or(_)) => false
+    		  						case TypeAssertion(_, maxCardinality(_, _)) => false
+    		  						case RoleAssertion(_, _, _) => false
+    		  						case _ => true
+    		  					 }))
+         
       orSet ++= getOrSet(newSet.filter(e ⇒ e._2 == false).keySet)
     } while (untestedSet.size != 0)
     //proof or Expr
@@ -84,19 +90,33 @@ class OptimizedTableau {
         clash = false
         do {
           for (a TypeAssertion c ← andSet) {
-            if (!((c.isInstanceOf[Concept] || c.isInstanceOf[Not]) && newSet.keySet.contains(TypeAssertion(a, nnf(Not(c)))))) {
-              Tableau(a, c)
-              newSet = newSet.updated(TypeAssertion(a, c), true)
-            } else clash = true
+            if ((c match {
+            	case Concept(_) ⇒ true
+            	case Not(_)     ⇒ true
+            	case _          ⇒ false
+            }) && (newSet.keySet contains TypeAssertion(a, nnf(Not(c))))) {
+            	clash = true
+            } else {
+            	Tableau(a, c)
+            	newSet = newSet.updated(TypeAssertion(a, c), true)
+            }
           }
-          andSet = newSet.filter(e ⇒ e._2 == false && e._1.isInstanceOf[TypeAssertion] 
-          && !e._1.asInstanceOf[TypeAssertion].expr.isInstanceOf[Or] && !e._1.asInstanceOf[TypeAssertion].expr.isInstanceOf[maxCardinality]).keySet
+          andSet = newSet.filter(e ⇒ e._2 == false && 
+        		  				(e._1 match {
+        		  					case TypeAssertion(_, Or(_)) => false
+        		  					case TypeAssertion(_, maxCardinality(_, _)) => false
+        		  					case RoleAssertion(_, _, _) => false
+        		  					case _ => true
+        		  				})).keySet
         } while (andSet.size != 0 && !clash)
         if (!(newSet.filter(e ⇒ e._2 == false).keySet).filter(isOr).isEmpty && !clash) {
           analyzeOr(getOrSet(newSet.filter(e ⇒ e._2 == false).keySet), newSet.keySet)
         } else if (!clash) {
           //TODO to check maxCardinality
-          var maxSet = newSet.filter(e => e._1.isInstanceOf[TypeAssertion] && e._1.asInstanceOf[TypeAssertion].expr.isInstanceOf[maxCardinality]).keySet
+          var maxSet = newSet.filter(e => e._1 match {
+    		  						case TypeAssertion(_, maxCardinality(_, _)) => true
+    		  						case _ => false
+    		  					}).keySet
           if (maxSet.size == 0) model += newSet.keySet
           else {
         	  	var breakflag = false
@@ -122,7 +142,28 @@ class OptimizedTableau {
     case And(expr)    ⇒ analyzeAnd(i, expr)
     case Exists(r, f) ⇒ analyzeExists(i, r, f)
     case ForAll(r, f) ⇒ analyzeForAll(i, r, f)
+    case minCardinality(n, r) => analyzeminCardinality(i, n, r)
     case _            ⇒ newSet += (TypeAssertion(i, f) -> false)
+  }
+  
+  private def analyzeminCardinality(x: Ind, n: Integer, r: Role): Unit = {
+    if (/*!isBlocked(x, null, null) &&*/ newSet.filterKeys(e => e match {
+      							case RoleAssertion(r, x, _) => true
+      							case _ => false
+    }).size < n) {
+        for (i <- 1 to n){
+        	val y = nextInd()
+        	var s = newSet.keySet
+        	instanceSet += y
+        	newSet += (RoleAssertion(r, x, y) -> false)	   	
+        }
+    }
+    //TODO how about Exists?
+    for (TypeAssertion(x, c) <- newSet.filterKeys(e => e match {
+      															case TypeAssertion(x, ForAll(r, _)) => true
+      															case _ => false}).keySet) {
+      Tableau(x, c)
+    }
   }
   
   private def analyzemaxCardinality(x: Ind, n: Integer, r: Role): Unit = {
@@ -146,7 +187,11 @@ class OptimizedTableau {
           e._1 match {
             case TypeAssertion(ind, expr) =>
               if (ind.equals(instance)) {
-            	  if ((expr.isInstanceOf[Concept] || expr.isInstanceOf[Not]) && newSet.keySet.contains(TypeAssertion(replaceInd, nnf(Not(expr))))) {
+            	  if ((expr match {
+            	  		case Concept(_) ⇒ true
+            	  		case Not(_)     ⇒ true
+            	  		case _          ⇒ false
+            	  }) && (newSet.keySet contains TypeAssertion(replaceInd, nnf(Not(expr))))) {
             	    clash = true;
             	    //FIXME should break out the for loop
             	    //break;
@@ -175,8 +220,11 @@ class OptimizedTableau {
     var s = newSet.keySet
     for (e ← instanceSet) {
       if ((s contains RoleAssertion(r, x, e)) && !(s contains TypeAssertion(e, f))) {
-        if ((f.isInstanceOf[Concept] || f.isInstanceOf[Not])
-          && s.contains(TypeAssertion(e, nnf(Not(f))))) {
+        if ((f match {
+          case Concept(_) ⇒ true
+          case Not(_)     ⇒ true
+          case _          ⇒ false
+        }) && (s contains TypeAssertion(e, nnf(Not(f))))) {
           clash = true
           return Unit
         } else {
@@ -187,55 +235,77 @@ class OptimizedTableau {
   }
 
   private def analyzeExists(x: Ind, r: Role, f: Expr): Unit = {
-    val y = nextInd()
+   // var ySet = Set[Ind]()
     var s = newSet.keySet
+    /*for (RoleAssertion(r, x, y) <- newSet.filterKeys(e => e match {
+      								case RoleAssertion(r, x, _) => true
+      								case _ => false}).keySet){
+      if (!(s contains TypeAssertion(y, f))) ySet += y
+    }        
+    if (ySet.size == 0) {
+      val instance = nextInd()
+      ySet += instance
+      instanceSet += instance
+    }
+    for (y <- ySet) {
+       if (!isBlocked(x, y, f)) {
+         instanceSet += y
+         newSet += (RoleAssertion(r, x, y) -> false)
+       } else { // y is blocked by x
+         model += newSet.keySet
+       } 
+    }*/
+    
+    val y = nextInd()
     if (!((s contains RoleAssertion(r, x, y)) && (s contains TypeAssertion(y, f)))) {
-      if ((f.isInstanceOf[Concept] || f.isInstanceOf[Not]) && s.contains((TypeAssertion(y, nnf(Not(f)))))) {
-        clash = true
-        return Unit
-      } else {
         if (!isBlocked(x, y, f)) {
           instanceSet += y
           newSet += (RoleAssertion(r, x, y) -> false)
         } else { // y is blocked by x
           model += newSet.keySet
         }
-      }
     }
+
   }
 
-  //FIXME should be blocked? Exists(Role("hatVollZeitJob"), Concept("Job1")) and Exists(Role("hatVollZeitJob"), Concept("Job2"))
+ 
   private def isBlocked(x: Ind, y: Ind, f: Expr): (Boolean) = {
     var blocked = false
     var subset = Set[Expr](f)
     var allset = Set[Set[Expr]]()
-    //var xset = Set[Expr]()
-    for (Ind <- instanceSet) {
-      allset += (
-          for (TypeAssertion(a, f) ← newSet.filterKeys( e => e.isInstanceOf[TypeAssertion] && e.asInstanceOf[TypeAssertion].a.equals(Ind)).keySet) yield {
-        	  f
-    })         
+    val iterator1 = instanceSet.iterator
+    var instance = iterator1.next()
+    while (!instance.equals(x)){
+      allset += (for (TypeAssertion(i, f) <- newSet.filterKeys(e => e match {
+          													case TypeAssertion(instance, _) => true
+          													case _ => false
+      								}).keySet) yield {f})
+      instance = iterator1.next()
     }
+    
+    allset += (for (TypeAssertion(i, f) <- newSet.filterKeys(e => e match {
+          													case TypeAssertion(x, _) => true
+          													case _ => false
+      								}).keySet) yield {f})
+
     for (e ← newSet) {
       e._1 match {
-        case RoleAssertion(r, a, b) ⇒ Unit
         case TypeAssertion(a, c) ⇒
           if (a.equals(x)) {
-            //xset += c
             c match {
               case Exists(role, form) ⇒ subset += form ; newSet = newSet.updated(e._1, true)
               case ForAll(role, form) ⇒ subset += form ; newSet = newSet.updated(e._1, true)
               case _                  ⇒ Unit
             }
           }
-          
+        case _ ⇒ Unit
       }
     }
-    var iterator = allset.iterator
+    val iterator2 = allset.iterator
     var breakflag = false
-    while (!breakflag && iterator.hasNext) {
-      val xset = iterator.next()
-      if (subset.subsetOf(xset)) { // y is not blocked by x
+    while (!breakflag && iterator2.hasNext) {
+      val xset = iterator2.next()
+      if (subset.subsetOf(xset)) { // y is blocked by x
     	  blocked = true    	  
     	  breakflag = true
       } 
@@ -248,19 +318,6 @@ class OptimizedTableau {
     		  }
     	  }
     }
-/*    for (xset <- allset) {
-      if (!subset.subsetOf(xset)) { // y is not blocked by x
-    	  for (e ← subset) {
-    		  if ((e.isInstanceOf[Concept] || e.isInstanceOf[Not]) && (newSet.keySet).contains((TypeAssertion(y, nnf(Not(e)))))) clash = true
-    		  else {
-    			newSet += (TypeAssertion(y, e) -> false)
-    		  }
-    	  }
-    	  blocked = false
-    	  //FIXME break problem
-    	  break;
-      } else blocked = true
-    }*/
     return (blocked)
   }
 
