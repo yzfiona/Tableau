@@ -17,10 +17,10 @@ abstract class Expr {
   def or(c: Expr): Expr = Or(List(this, c))
   def ⊓(c: Expr): Expr = and(c)
   def ⊔(c: Expr): Expr = or(c)
-  def ≤(n: Integer, r: Role): Expr = maxCardinality(n: Integer, r: Role)
-  def ≥(n: Integer, r: Role): Expr = minCardinality(n: Integer, r: Role)
- // def ≤(n: Integer, r: Role, f: Expr): Expr = maxCardinality(n: Integer, r: Role, f: Expr)
- // def ≥(n: Integer, r: Role, f: Expr): Expr = minCardinality(n: Integer, r: Role, f: Expr)
+  def ≤(n: Integer, r: Role): Expr = new maxCardinality(n: Integer, r: Role)
+  def ≥(n: Integer, r: Role): Expr = new minCardinality(n: Integer, r: Role)
+  def ≤(n: Integer, r: Role, f: Expr): Expr = maxCardinality(n: Integer, r: Role, f: Expr)
+  def ≥(n: Integer, r: Role, f: Expr): Expr = minCardinality(n: Integer, r: Role, f: Expr)
 }
 
 case object Top extends Expr
@@ -31,13 +31,18 @@ case class And(f: List[Expr]) extends Expr
 case class Or(f: List[Expr]) extends Expr
 case class Exists(r: Role, f: Expr) extends Expr
 case class ForAll(r: Role, f: Expr) extends Expr
-case class maxCardinality(n: Integer, r: Role) extends Expr{
-  var f: Expr = Top
-  def this(n: Integer, r: Role, f: Expr) = {this(n, r); this.f = f}
+case class maxCardinality(n: Integer, r: Role, f: Expr) extends Expr{
+  def this(n: Integer, r: Role) = {this(n, r, Top)}
+  /*override def equals(ob : Any): Boolean = {
+    if (!ob.isInstanceOf[maxCardinality]) return false
+    else {
+      val expr: maxCardinality = ob.asInstanceOf[maxCardinality]
+      return (expr.n == this.n && expr.r.equals(this.r) && expr.f.equals(this.f))
+    }   
+  }*/
 }
-case class minCardinality(n: Integer, r: Role) extends Expr{
-  var f: Expr = Top
-  def this(n: Integer, r: Role, f: Expr) = {this(n, r); this.f = f}
+case class minCardinality(n: Integer, r: Role, f: Expr) extends Expr{
+  def this(n: Integer, r: Role) = {this(n, r, Top)}
 }
 
 abstract class Individual
