@@ -117,7 +117,7 @@ class optimizedTableauTest {
     val end = System.currentTimeMillis()
     println("Execution Time:" + ((end - start) / 100) + "ms");
     assertTrue(true)
-  }
+  }*/
   
   @Test def testInternalization1() {
     val onto : Set[Axiom] = Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("c")))
@@ -126,7 +126,7 @@ class optimizedTableauTest {
     assertTrue(tableauR._1)
   }
 
-  @Test def testInternalization2() {
+ /* @Test def testInternalization2() {
     val onto : Set[Axiom] = Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("a")))
     val axiom  = EquivalentClass(Concept("a"), Concept("b"))
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)

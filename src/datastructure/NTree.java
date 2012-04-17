@@ -41,7 +41,7 @@ public class NTree {
 				if (Node.equals(EmptyLabel)) System.out.print("    ");
 				else if (Node.getChildren().size() == 0) {
 					System.out.print(Node.getValue()+"(leaf) ");
-					if (Node.getParent().equals(AncestorNode)) AncestorNode = findNextAncestor(AncestorNode);
+					if (Node.equals(AncestorNode)) AncestorNode = findNextAncestor(AncestorNode);
 				}
 				else {
 					System.out.print(Node.getValue()+" ");

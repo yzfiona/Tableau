@@ -20,10 +20,8 @@ public class TreeNode{
 		if (this.value.equals(value)) node = this;
 		else {
 			for (TreeNode child: children) {
-				if (child.find(value) != null) {
-					node = child;
-					break;
-				}
+				node = child.find(value);
+				if (node != null) 	break;
 			}
 			if (node == null) {
 				node = this.parent;

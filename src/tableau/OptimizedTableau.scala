@@ -17,18 +17,19 @@ class OptimizedTableau {
   private var model = Set[Set[Axiom]]()
   private var newSet: Map[Axiom, Boolean] = Map()
   
-  private var onto : Ontology = null
+  private var onto : Expr = null
   
   private var Tree = new NTree()
   private var currentNode = new TreeNode()
 
   def isSatisfiable(axiom: Axiom, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
-    this.onto = onto
+    this.onto = And(removeRedudantAnd(NNF.nnf(internalize(onto))))
     return isSatisfiable(axiom.toConcept, onto)
   }
   
   def isSatisfiable(expr: Expr, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
-    return isSatisfiable((internalize(onto)) and Not(expr))
+    this.onto = And(removeRedudantAnd(NNF.nnf(internalize(onto))))
+    return isSatisfiable(internalize(onto) and expr)//(internalize(onto)) and Not(expr))
   }
 
   def isSatisfiable(expr: Expr): (Boolean, Set[Set[Axiom]]) = {
@@ -46,7 +47,6 @@ class OptimizedTableau {
     var untestedSet = newSet.filter(e ⇒ e._2 == false)
     do {
       for (e ← untestedSet) {
-        //currentNode = currentNode.find(e._1)
         e._1 match {
           case RoleAssertion(r, a, b)  ⇒ Unit
           case TypeAssertion(a, Or(c)) ⇒ Unit
@@ -79,8 +79,7 @@ class OptimizedTableau {
           for (TypeAssertion(x, expr: maxCardinality) <- untestedSet.keySet) {
               //a rule for expressions such as ≤nR.A ⊓ ≤nR.¬A
         	  if (newSet.keySet.contains((TypeAssertion(x, maxCardinality(expr.n, expr.r, Not(expr.f)))))) {
-        	    clash = true
-        	   // currentNode = Tree.insert(currentNode, TypeAssertion(x, maxCardinality(expr.n, expr.r, expr.f)))     	    
+        	    clash = true 	    
         	  }
         	  else if (!clash) analyzemaxCardinality(x, expr.n, expr.r, expr.f) 
           }
@@ -214,7 +213,7 @@ class OptimizedTableau {
     var oldmap = newSet
     var count: Integer = 0
     var roleSet : List[RoleAssertion] = List[RoleAssertion]()
-    if (f == null) roleSet = newSet.filterKeys(e => e match {
+    if (f.equals(Top)) roleSet = newSet.filterKeys(e => e match {
       									case RoleAssertion(r, x, _) => true
       									case _ => false
     								}).keySet.toList.asInstanceOf[List[RoleAssertion]]
@@ -237,37 +236,40 @@ class OptimizedTableau {
         while(!breakflag && iterator.hasNext) {//for ( e <- newSetbackup){
           var e = iterator.next()
           e._1 match {
-            case TypeAssertion(instance, expr) =>
-                currentNode = currentNode.find(TypeAssertion(instance, expr))
+            case TypeAssertion(ind, expr) =>
+            if (ind.equals(instance)) {
+                  var result = currentNode.find(TypeAssertion(instance, expr))
+                  if (result != null) currentNode = result
             	  if ((expr match {
             	  		case Concept(_) ⇒ true
             	  		case Not(_)     ⇒ true
             	  		case _          ⇒ false
             	  }) && (newSet.keySet contains TypeAssertion(replaceInd, nnf(Not(expr))))) {
             	    clash = true;            	    
-            	    currentNode.updateValue(TypeAssertion(replaceInd, expr))
-            	    //Tree.insert(currentNode, TypeAssertion(replaceInd, Bottom))
+            	    if (result != null)  currentNode.updateValue(TypeAssertion(replaceInd, expr))
             	    //FIXME should break out the for loop
             	    //break;
             	    breakflag = true
             	  }
             	  else {
             	    newSet = newSet.-(e._1).+(TypeAssertion(replaceInd, expr) -> false)
-            	    currentNode.updateValue(TypeAssertion(replaceInd, expr))
+            	    if (result != null)   currentNode.updateValue(TypeAssertion(replaceInd, expr))
             	  }
+            }
             case RoleAssertion(role, ind1, ind2) =>
-              currentNode = currentNode.find(RoleAssertion(role, ind1, ind2))
+              var result = currentNode.find(RoleAssertion(role, ind1, ind2))
+              if (result != null) currentNode = result
               if (ind1.equals(instance) && ind2.equals(instance)) {
                 newSet = newSet.-(e._1).+(RoleAssertion(role, replaceInd, replaceInd) -> false)
-                currentNode.updateValue(RoleAssertion(role, replaceInd, replaceInd))               
+                 if (result != null) currentNode.updateValue(RoleAssertion(role, replaceInd, replaceInd))               
               }
               else if (ind1.equals(instance)) {
                 newSet = newSet.-(e._1).+(RoleAssertion(role, replaceInd, ind2) -> false)
-                currentNode.updateValue(RoleAssertion(role, replaceInd, ind2))    
+                 if (result != null) currentNode.updateValue(RoleAssertion(role, replaceInd, ind2))    
               }
               else if (ind2.equals(instance)) {
                 newSet = newSet.-(e._1).+(RoleAssertion(role, ind1, replaceInd) -> false)
-                 currentNode.updateValue(RoleAssertion(role, ind1, replaceInd))   
+                 if (result != null)  currentNode.updateValue(RoleAssertion(role, ind1, replaceInd))   
               }
             case _ => Unit
           }
@@ -365,8 +367,8 @@ class OptimizedTableau {
           instanceSet += y
           newSet += (RoleAssertion(r, x, y) -> false)         
           if (this.onto != null) { 
-        	  currentNode = Tree.insert(currentNode, TypeAssertion(y, (internalize(onto))))
-        	  newSet += (TypeAssertion(y, (internalize(onto))) -> false)
+        	  currentNode = Tree.insert(currentNode, TypeAssertion(y, this.onto))
+        	  newSet += (TypeAssertion(y, this.onto) -> false)
           }
           for (e ← subset) {
     		  if ((e.isInstanceOf[Concept] || e.isInstanceOf[Not]) && (newSet.keySet).contains((TypeAssertion(y, nnf(Not(e)))))){
