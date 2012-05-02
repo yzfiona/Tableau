@@ -53,21 +53,28 @@ abstract class RoleExpr extends Expr
 case class Role(r: String) extends RoleExpr
 //case class InvRole(r: Role) extends RoleExpr
 
-abstract class Axiom {
+abstract class Axiom 
+//TBox
+abstract class TBoxAxiom extends Axiom{
   def toConcept: Expr
 }
-case class TypeAssertion(a: Ind, expr: Expr) extends Axiom {
-  def toConcept = ⊥ // FIXME find other solution (use nominals?)
-}
-case class RoleAssertion(r: Role, a: Ind, b: Ind) extends Axiom {
-  def toConcept = ⊥ // FIXME find other solution (use nominals?)
-}
-case class SubClassOf(c: Expr, d: Expr) extends Axiom {
+case class SubClassOf(c: Expr, d: Expr) extends TBoxAxiom {
   def toConcept = ¬(c) ⊔ d
 }
-case class EquivalentClass(c: Expr, d: Expr) extends Axiom {
+case class EquivalentClass(c: Expr, d: Expr) extends TBoxAxiom {
   def toConcept = (¬(c) ⊔ d) ⊓ (c ⊔ ¬(d))
 }
+//ABox
+abstract class ABoxAxiom extends Axiom
+case class TypeAssertion(a: Ind, expr: Expr) extends ABoxAxiom {
+  def toConcept = ⊥ // FIXME find other solution (use nominals?)
+}
+case class RoleAssertion(r: Role, a: Ind, b: Ind) extends ABoxAxiom {
+  def toConcept = ⊥ // FIXME find other solution (use nominals?)
+}
+case class NotEquivalentIndividual(a: Ind, b: Ind) extends ABoxAxiom
+
+
 
 //case class InvRoleAssertion(r: Role, s: Role) extends RoleExpr
 

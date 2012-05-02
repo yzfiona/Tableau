@@ -5,6 +5,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import tableau.Internalization.internalize
 import tableau._
+import model.Ontology
 
 class optimizedTableauTest {
 
@@ -98,7 +99,7 @@ class optimizedTableauTest {
     assertTrue(tableauR._1)
   }
 
-  @Test def testTime() {
+/*  @Test def testTime() {
     val expr: Expr =
       And(List(Exists(Role("R"), Concept("A")), Exists(Role("R"), Concept("B")), Exists(Role("R"), Concept("C")),
     	Exists(Role("R"), Concept("D")), Exists(Role("R"), Concept("E")), Exists(Role("R"), Concept("F")),
@@ -117,30 +118,30 @@ class optimizedTableauTest {
     val end = System.currentTimeMillis()
     println("Execution Time:" + ((end - start) / 100) + "ms");
     assertTrue(true)
-  }*/
+  }
   
   @Test def testInternalization1() {
-    val onto : Set[Axiom] = Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("c")))
+    val onto : Ontology = new Ontology(Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("c"))))
     val axiom  = SubClassOf(Concept("a"), Concept("c"))
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)
     assertTrue(tableauR._1)
   }
 
- /* @Test def testInternalization2() {
-    val onto : Set[Axiom] = Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("a")))
+  @Test def testInternalization2() {
+    val onto : Ontology = new Ontology(Set(SubClassOf(Concept("a"), Concept("b")), SubClassOf(Concept("b"), Concept("a"))))
     val axiom  = EquivalentClass(Concept("a"), Concept("b"))
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)
     assertTrue(tableauR._1)
   }*/
     
   @Test def testmaxCardinality1() {
-    val onto : Set[Axiom] = Set(EquivalentClass(Concept("Job1"), Not(Concept("Job2"))))
+    val onto : Ontology = new Ontology(Set(EquivalentClass(Concept("Job1"), Not(Concept("Job2")))))
     val axiom  = new maxCardinality(1, Role("hatVollZeitJob")) and Exists(Role("hatVollZeitJob"), Concept("Job1")) and Exists(Role("hatVollZeitJob"), Concept("Job2"))
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)//internalize(onto) and axiom)
     assertTrue(tableauR._1)
   }
    
-  /* @Test def testmaxCardinality2() {
+  @Test def testmaxCardinality2() {
     val expr: Expr =
       And(List(maxCardinality(1, Role("R"), Concept("A")), maxCardinality(1, Role("R"),Not(Concept("A")))))
     val tableauR = new OptimizedTableau().isSatisfiable(expr)
@@ -167,6 +168,20 @@ class optimizedTableauTest {
       And(List(ForAll(Role("R"),Not(Concept("A"))), new minCardinality(1, Role("R")), Exists(Role("R"), Concept("A"))))
     val tableauR = new OptimizedTableau().isSatisfiable(expr)
     assertTrue(tableauR._1)
-   }*/
+   }
+  
+  @Test def testminCardinality3(){
+	val onto : Ontology = new Ontology(Set(EquivalentClass(Concept("Children"), Concept("Daughter") or Concept("Son"))))
+    val axiom = new minCardinality(2, Role("hatChild"),  Concept("Children")) and Not(Exists(Role("hatChild"), Concept("Daughter"))) and Not(Exists(Role("hatChild"), Concept("Son")))
+    val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)
+    assertTrue(tableauR._1)
+  }*/
+  
+    @Test def testInstance(){
+	val onto : Ontology = new Ontology(Set(TypeAssertion(Ind("y"),Concept("Man")), TypeAssertion(Ind("z"),Concept("Man")), RoleAssertion(Role("R"),Ind("x"), Ind("y")), RoleAssertion(Role("R"),Ind("x"), Ind("z"))))
+    val axiom = TypeAssertion(Ind("x"), maxCardinality(1, Role("R"),  Concept("Man")))
+    val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto) //Set(EquivalentIndividual(Ind("y"),Ind("z")), 
+    assertTrue(tableauR._1)
+  }
   
 }

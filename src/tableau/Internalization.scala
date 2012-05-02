@@ -4,7 +4,7 @@ import Expr._
 
 object Internalization {
 
-  def internalize(axioms: Set[Axiom]): Expr = {
+  def internalize(axioms: Set[TBoxAxiom]): Expr = {
 
     val concepts = for (axiom ← axioms) yield {
       axiom.toConcept

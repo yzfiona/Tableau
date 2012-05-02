@@ -2,9 +2,9 @@ package tableau
 
 import NNF.nnf
 import tableau.Internalization.internalize
-import model.OntologySpec._
 import datastructure.NTree
 import datastructure.TreeNode
+import model.Ontology
 //import scala.util.control.Breaks._
 
 class OptimizedTableau {
@@ -12,51 +12,82 @@ class OptimizedTableau {
   private var counter: Int = 0
   private def nextInd(): Ind = { counter += 1; return Ind("x" + counter) }
   private var instanceSet: Set[Ind] = Set[Ind]()
+  private var notEqInstance : Set[Set[Ind]] = Set[Set[Ind]]()
 
   private var clash: Boolean = false
   private var model = Set[Set[Axiom]]()
-  private var newSet: Map[Axiom, Boolean] = Map()
+  private var axiomMap: Map[Axiom, Boolean] = Map()
   
-  private var onto : Expr = null
+  private var tbox : Expr = null
+  private var onto : Ontology = null
   
   private var Tree = new NTree()
   private var currentNode = new TreeNode()
 
-  def isSatisfiable(axiom: Axiom, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
-    this.onto = And(removeRedudantAnd(NNF.nnf(internalize(onto))))
+  def isSatisfiable(axiom: TBoxAxiom, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
     return isSatisfiable(axiom.toConcept, onto)
   }
   
+  def isSatisfiable(axiom: ABoxAxiom, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
+    this.tbox = And(removeRedudantAnd(NNF.nnf(internalize(onto.TBox))))
+    this.onto = onto.addAxiom(axiom)
+    return isSatisfiable(internalize(onto.TBox))
+  }
+  
   def isSatisfiable(expr: Expr, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
-    this.onto = And(removeRedudantAnd(NNF.nnf(internalize(onto))))
-    return isSatisfiable(internalize(onto) and expr)//(internalize(onto)) and Not(expr))
+    this.tbox = And(removeRedudantAnd(NNF.nnf(internalize(onto.TBox))))
+    this.onto = onto
+    return isSatisfiable(internalize(onto.TBox) and expr)//(internalize(onto)) and Not(expr))
   }
 
   def isSatisfiable(expr: Expr): (Boolean, Set[Set[Axiom]]) = {
-    val instance = nextInd()
-    instanceSet += instance
-    val axiom = TypeAssertion(instance, And(removeRedudantAnd(NNF.nnf(expr))))
-    newSet += (axiom -> false)
-    Tree.insert(axiom)
-    currentNode = Tree.getRoot()
+    var toDo = false
+    expr match {
+      case And(c) => if (c.size != 0) toDo = true
+      case _ => true
+    }
+    if (toDo) {
+    	val instance = nextInd()
+    	instanceSet += instance
+    	val axiom = TypeAssertion(instance, And(removeRedudantAnd(NNF.nnf(expr))))
+    	axiomMap += (axiom -> false)
+    }
+    if (this.onto != null) {
+      for (axiom <- this.onto.ABox) {
+        axiomMap += (axiom -> false)
+        axiom match {
+          case TypeAssertion(ind, expr) => instanceSet += ind
+          case RoleAssertion(r, ind1, ind2) => instanceSet = instanceSet ++ Set(ind1,ind2)
+          case NotEquivalentIndividual(ind1, ind2) => 
+            	instanceSet = instanceSet ++ Set(ind1,ind2)
+            	var set = notEqInstance.find( e => e.contains(ind1) && e.contains(ind2))
+            	if (set.size == 0) notEqInstance += Set(ind1, ind2)
+            	else notEqInstance = notEqInstance.-(set.first).+(set.first+(ind1)+(ind2))
+        }
+      }
+    }
     return TableauProof()
   }
 
   private def TableauProof(): (Boolean, Set[Set[Axiom]]) = {
-    var orSet = getOrSet(newSet.filter(e ⇒ e._2 == false).keySet)
-    var untestedSet = newSet.filter(e ⇒ e._2 == false)
+    var orSet = getOrSet(axiomMap.filter(e ⇒ e._2 == false).keySet)
+    var untestedSet = axiomMap.filter(e ⇒ e._2 == false)
+    Tree.insert(axiomMap.keySet.first)
+    currentNode = Tree.getRoot()
     do {
       for (e ← untestedSet) {
         e._1 match {
           case RoleAssertion(r, a, b)  ⇒ Unit
           case TypeAssertion(a, Or(c)) ⇒ Unit
+          case NotEquivalentIndividual(_,_) => Unit
           case TypeAssertion(a, maxCardinality(n, r, f)) => Unit
-          case TypeAssertion(a, c)     ⇒ Tableau(a, c)
+          case TypeAssertion(a, c)     ⇒ 
+          	Tableau(a, c)
+          	axiomMap = axiomMap.updated(e._1, true)
         }
-        newSet = newSet.updated(e._1, true)
       }
       //build the test set which doesn't contain or and maxCardinality
-      untestedSet = newSet.filter(e ⇒ e._2 == false && 
+      untestedSet = axiomMap.filter(e ⇒ e._2 == false && 
     		  					 (e._1 match {
     		  						case TypeAssertion(_, Or(_)) => false
     		  						case TypeAssertion(_, maxCardinality(_, _, _)) => false
@@ -64,26 +95,26 @@ class OptimizedTableau {
     		  						case _ => true
     		  					 }))
          
-      orSet ++= getOrSet(newSet.filter(e ⇒ e._2 == false).keySet)
+      orSet ++= getOrSet(axiomMap.filter(e ⇒ e._2 == false).keySet)
     } while (untestedSet.size != 0)
     //proof or Expr
-    if (!clash) {
-      if (orSet.size != 0) analyzeOr(orSet.first, newSet.keySet)
+    if (!clash && !checkCardinality) {
+      if (orSet.size != 0) analyzeOr(orSet.first, axiomMap.keySet)
       else {
-        untestedSet = newSet.filter(e => e._2 == false && 
+        untestedSet = axiomMap.filter(e => e._2 == false && 
         								(e._1 match {
           									  case TypeAssertion(_, maxCardinality(_, _, _)) => true
           						    		  case _ => false
         								}))
         if (untestedSet.size != 0) {
           for (TypeAssertion(x, expr: maxCardinality) <- untestedSet.keySet) {
-              //a rule for expressions such as ≤nR.A ⊓ ≤nR.¬A
-        	  if (newSet.keySet.contains((TypeAssertion(x, maxCardinality(expr.n, expr.r, Not(expr.f)))))) {
+            /*  //a rule for expressions such as ≤nR.A ⊓ ≤nR.¬A
+        	  if (axiomMap.keySet.contains((TypeAssertion(x, maxCardinality(expr.n, expr.r, Not(expr.f)))))) {
         	    clash = true 	    
         	  }
-        	  else if (!clash) analyzemaxCardinality(x, expr.n, expr.r, expr.f) 
+        	  else if (!clash) */analyzemaxCardinality(x, expr.n, expr.r, expr.f) 
           }
-        } else model += newSet.keySet       
+        } else model += axiomMap.keySet       
       }      
     }
     if (clash) println("clash")
@@ -92,23 +123,14 @@ class OptimizedTableau {
 
     return (clash, model)
   }
-  
-    private def getOrSet(s: Set[Axiom]): Set[TypeAssertion] = {
-    val orSet: Set[Axiom] = s.filter(e => e match {
-       									case TypeAssertion(_, Or(_)) ⇒ true
-       									case _                       ⇒ false 
-    								});
-    // TODO find other solution than type-casting
-    return orSet.asInstanceOf[Set[TypeAssertion]]
-  }
      
   private def Tableau(i: Ind, f: Expr): Unit = f match {
     case And(expr)    ⇒ analyzeAnd(i, expr)
     case Exists(r, f) ⇒ analyzeExists(i, r, f)
     case ForAll(r, f) ⇒ analyzeForAll(i, r, f)
-    case minCardinality(n, r, f) => analyzeminCardinality(i, n, r)
-    case Concept(c) => newSet = newSet.updated(TypeAssertion(i, f), true)
-    case Not(Concept(c)) => newSet = newSet.updated(TypeAssertion(i, f), true)
+    case minCardinality(n, r, f) => analyzeminCardinality(i, n, r, f)
+    case Concept(c) => axiomMap = axiomMap.updated(TypeAssertion(i, f), true)
+    case Not(Concept(c)) => axiomMap = axiomMap.updated(TypeAssertion(i, f), true)
     case _            ⇒  Unit//println("Error: No matched pattern found")
   }
 
@@ -121,8 +143,8 @@ class OptimizedTableau {
    // for (TypeAssertion(a, Or(cs)) ← orSet) {
     or match {
       case TypeAssertion(a, Or(cs)) =>
-      newSet = newSet.updated(or, true)//TypeAssertion(a, Or(cs)), true)
-      oldmap = newSet
+      axiomMap = axiomMap.updated(or, true)//TypeAssertion(a, Or(cs)), true)
+      oldmap = axiomMap
       oldinstanceSet = instanceSet
       var i = 0
       if (!clash) {
@@ -136,14 +158,14 @@ class OptimizedTableau {
             	case Concept(_) ⇒ true
             	case Not(_)     ⇒ true
             	case _          ⇒ false
-            }) && (newSet.keySet contains TypeAssertion(a, nnf(Not(c))))) {
+            }) && (axiomMap.keySet contains TypeAssertion(a, nnf(Not(c))))) {
             	clash = true    	
             } else {
             	Tableau(a, c)
-            	newSet = newSet.updated(TypeAssertion(a, c), true)
+            	axiomMap = axiomMap.updated(TypeAssertion(a, c), true)
             }
           }
-          andSet = newSet.filter(e ⇒ e._2 == false && 
+          andSet = axiomMap.filter(e ⇒ e._2 == false && 
         		  				(e._1 match {
         		  					case TypeAssertion(_, Or(_)) => false
         		  					case TypeAssertion(_, maxCardinality(_, _, _)) => false
@@ -151,17 +173,17 @@ class OptimizedTableau {
         		  					case _ => true
         		  				})).keySet
         } while (andSet.size != 0 && !clash)
-          orSet = getOrSet(newSet.filter(e ⇒ e._2 == false).keySet)
+          orSet = getOrSet(axiomMap.filter(e ⇒ e._2 == false).keySet)
         if (!orSet.isEmpty && !clash) {
-          analyzeOr(orSet.first, newSet.keySet)
+          analyzeOr(orSet.first, axiomMap.keySet)
         } else if (!clash) {
           //to check maxCardinality
-          var maxSet = newSet.filter(e => e._1 match {
+          var maxSet = axiomMap.filter(e => e._1 match {
     		  						case TypeAssertion(_, maxCardinality(_, _, _)) => true
     		  						case _ => false
     		  					}).keySet
-          if (maxSet.size == 0) model += newSet.keySet
-          else {
+          if (maxSet.size == 0) model += axiomMap.keySet
+          else if (!checkCardinality){
         	  	var breakflag = false
         	  	var iterator = maxSet.iterator
             	while(!breakflag && iterator.hasNext) {//for (TypeAssertion(ind, maxCardinality(n, r)) <- maxSet) {
@@ -174,7 +196,7 @@ class OptimizedTableau {
           }          
         }
         if (clash) i += 1
-        newSet = oldmap
+        axiomMap = oldmap
         currentNode = BranchNode
         instanceSet = oldinstanceSet
       }
@@ -184,41 +206,53 @@ class OptimizedTableau {
     }
   }
   
-  private def analyzeminCardinality(x: Ind, n: Integer, r: Role): Unit = {
-    if (newSet.filterKeys(e => e match {
+  private def analyzeminCardinality(x: Ind, n: Integer, r: Role, f: Expr): Unit = {
+    var roleSet: Map[Axiom, Boolean] = Map()
+    if (f.equals(Top)) {
+      roleSet = axiomMap.filterKeys(e => e match {
       							case RoleAssertion(r, x, _) => true
-      							case _ => false
-    }).size < n) {
+      							case _ => false})
+    } else {
+      roleSet = axiomMap.filterKeys(e => e match {
+      							case RoleAssertion(r, x, y) => 
+      								if (axiomMap.keySet.contains(TypeAssertion(y, f))) true
+      								else false
+      							case _ => false})
+    }
+    if (roleSet.size < n) {
         for (i <- 1 to n){
         	val y = nextInd()
-        	var s = newSet.keySet
+        	var s = axiomMap.keySet
         	instanceSet += y
-        	newSet += (RoleAssertion(r, x, y) -> false)	   	
+        	//FIXME is it meaningful to check the generated instance are equivalent?
+        	axiomMap += (RoleAssertion(r, x, y) -> false)	   	
         	currentNode = Tree.insert(currentNode, RoleAssertion(r, x, y))
+        	if (!f.equals(Top)) {
+        	  axiomMap += (TypeAssertion(y, f) -> false)	   	
+        	  if (this.tbox != null) axiomMap += (TypeAssertion(y, this.tbox) -> false)	
+        	  currentNode = Tree.insert(currentNode, TypeAssertion(y, f))
+        	}
         }
     }
-    //TODO how about Exists?
-    for (TypeAssertion(x, c) <- newSet.filterKeys(e => e match {
+    for (TypeAssertion(x, c) <- axiomMap.filterKeys(e => e match {
       															case TypeAssertion(x, ForAll(r, _)) => true
       															case _ => false}).keySet) {
       Tableau(x, c)
     }
   }
   
-  private def analyzemaxCardinality(x: Ind, n: Integer, r: Role, f: Expr): Unit = {
-
-    
+  private def analyzemaxCardinality(x: Ind, n: Integer, r: Role, f: Expr): Unit = {    
     //FIXME type-casting
     var orSet : Set[RoleAssertion] = Set[RoleAssertion]()
-    var oldmap = newSet
+    var oldmap = axiomMap
     var count: Integer = 0
     var roleSet : List[RoleAssertion] = List[RoleAssertion]()
-    if (f.equals(Top)) roleSet = newSet.filterKeys(e => e match {
+    if (f.equals(Top)) roleSet = axiomMap.filterKeys(e => e match {
       									case RoleAssertion(r, x, _) => true
       									case _ => false
     								}).keySet.toList.asInstanceOf[List[RoleAssertion]]
-    else roleSet = newSet.filterKeys(e => e match {
-      									case RoleAssertion(r, x, y) => newSet.keySet.contains(TypeAssertion(y, f))
+    else roleSet = axiomMap.filterKeys(e => e match {
+      									case RoleAssertion(r, x, y) => axiomMap.keySet.contains(TypeAssertion(y, f))
       									case _ => false
     								}).keySet.toList.asInstanceOf[List[RoleAssertion]]
     if (roleSet.size > n){
@@ -230,54 +264,54 @@ class OptimizedTableau {
        replacedInd += roleSet.apply(j).b
       }
      for(instance <- replacedInd) {
-        //update newSet by replacing all replacedInd with replaceInd
+        //update axiomMap by replacing all replacedInd with replaceInd
         var breakflag = false
         var iterator = oldmap.iterator
-        while(!breakflag && iterator.hasNext) {//for ( e <- newSetbackup){
-          var e = iterator.next()
-          e._1 match {
-            case TypeAssertion(ind, expr) =>
-            if (ind.equals(instance)) {
-                  var result = currentNode.find(TypeAssertion(instance, expr))
-                  if (result != null) currentNode = result
-            	  if ((expr match {
-            	  		case Concept(_) ⇒ true
-            	  		case Not(_)     ⇒ true
-            	  		case _          ⇒ false
-            	  }) && (newSet.keySet contains TypeAssertion(replaceInd, nnf(Not(expr))))) {
-            	    clash = true;            	    
-            	    if (result != null)  currentNode.updateValue(TypeAssertion(replaceInd, expr))
+        while(!breakflag && iterator.hasNext) {//for ( e <- axiomMapbackup){         
+          if (checkEqual(instance, replaceInd) ) {
+        	  var e = iterator.next()
+        	  e._1 match {
+        	  	case TypeAssertion(ind, expr) =>
+        	  		if (ind.equals(instance)) {
+        	  			var result = currentNode.find(TypeAssertion(instance, expr))
+        	  			if (result != null) currentNode = result
+        	  			if ((expr match {
+            	  			case Concept(_) ⇒ true
+            	  			case Not(_)     ⇒ true
+            	  			case _          ⇒ false
+        	  			}) && (axiomMap.keySet contains TypeAssertion(replaceInd, nnf(Not(expr))))) {
+        	  				clash = true;            	    
+        	  				if (result != null)  currentNode.updateValue(TypeAssertion(replaceInd, expr))
             	    //FIXME should break out the for loop
             	    //break;
-            	    breakflag = true
-            	  }
-            	  else {
-            	    newSet = newSet.-(e._1).+(TypeAssertion(replaceInd, expr) -> false)
-            	    if (result != null)   currentNode.updateValue(TypeAssertion(replaceInd, expr))
-            	  }
-            }
-            case RoleAssertion(role, ind1, ind2) =>
-              var result = currentNode.find(RoleAssertion(role, ind1, ind2))
-              if (result != null) currentNode = result
-              if (ind1.equals(instance) && ind2.equals(instance)) {
-                newSet = newSet.-(e._1).+(RoleAssertion(role, replaceInd, replaceInd) -> false)
-                 if (result != null) currentNode.updateValue(RoleAssertion(role, replaceInd, replaceInd))               
-              }
-              else if (ind1.equals(instance)) {
-                newSet = newSet.-(e._1).+(RoleAssertion(role, replaceInd, ind2) -> false)
-                 if (result != null) currentNode.updateValue(RoleAssertion(role, replaceInd, ind2))    
-              }
-              else if (ind2.equals(instance)) {
-                newSet = newSet.-(e._1).+(RoleAssertion(role, ind1, replaceInd) -> false)
-                 if (result != null)  currentNode.updateValue(RoleAssertion(role, ind1, replaceInd))   
-              }
-            case _ => Unit
+        	  				breakflag = true
+        	  			}
+        	  			else {
+        	  				axiomMap = axiomMap.-(e._1).+(TypeAssertion(replaceInd, expr) -> false)
+        	  				if (result != null)   currentNode.updateValue(TypeAssertion(replaceInd, expr))
+        	  			}
+        	  		}
+        	  	case RoleAssertion(role, ind1, ind2) =>
+        	  		var result = currentNode.find(RoleAssertion(role, ind1, ind2))
+        	  		if (result != null) currentNode = result
+        	  		if (ind1.equals(instance) && ind2.equals(instance)) {
+        	  			axiomMap = axiomMap.-(e._1).+(RoleAssertion(role, replaceInd, replaceInd) -> false)
+        	  			if (result != null) currentNode.updateValue(RoleAssertion(role, replaceInd, replaceInd))               
+        	  		} else if (ind1.equals(instance)) {
+        	  			axiomMap = axiomMap.-(e._1).+(RoleAssertion(role, replaceInd, ind2) -> false)
+        	  			if (result != null) currentNode.updateValue(RoleAssertion(role, replaceInd, ind2))    
+        	  		} else if (ind2.equals(instance)) {
+        	  			axiomMap = axiomMap.-(e._1).+(RoleAssertion(role, ind1, replaceInd) -> false)
+        	  			if (result != null)  currentNode.updateValue(RoleAssertion(role, ind1, replaceInd))   
+        	  		}
+        	  	case _ => Unit
+        	  }
           }
         }
         //check all the possibilities
-        if (!clash) model += newSet.keySet
+        if (!clash) model += axiomMap.keySet
         else {count += 1; clash = false}
-        newSet = oldmap
+        axiomMap = oldmap
       }
     }
     if (count == roleSet.size -1 ) clash = true
@@ -286,7 +320,7 @@ class OptimizedTableau {
   }
 
   private def analyzeForAll(x: Ind, r: Role, f: Expr): Unit = {
-    var s = newSet.keySet
+    var s = axiomMap.keySet
     for (e ← instanceSet) {
       if ((s contains RoleAssertion(r, x, e)) && !(s contains TypeAssertion(e, f))) {
         if ((f match {
@@ -299,7 +333,7 @@ class OptimizedTableau {
           //Tree.insert(currentNode, TypeAssertion(e, Bottom))
           return Unit
         } else {
-          newSet += (TypeAssertion(e, f) -> false)
+          axiomMap += (TypeAssertion(e, f) -> false)
           currentNode = Tree.insert(currentNode, TypeAssertion(e, f))
         }
       }
@@ -307,11 +341,11 @@ class OptimizedTableau {
   }
 
   private def analyzeExists(x: Ind, r: Role, f: Expr): Unit = {
-    var s = newSet.keySet   
+    var s = axiomMap.keySet   
     val y = nextInd()
     if (!((s contains RoleAssertion(r, x, y)) && (s contains TypeAssertion(y, f)))) {
         if (isBlocked(x, y, r, f)) { // y is blocked by x
-          model += newSet.keySet
+          model += axiomMap.keySet
         }
     }
 
@@ -326,31 +360,31 @@ class OptimizedTableau {
     var instance = iterator1.next()
     //to check if y is blocked by any of its ancestors
     while (!instance.equals(x)){
-      allset += (for (TypeAssertion(i, f) <- newSet.filterKeys(e => e match {
+      allset += (for (TypeAssertion(i, f) <- axiomMap.filterKeys(e => e match {
           													case TypeAssertion(instance, _) => true
           													case _ => false
       								}).keySet) yield {f})
       instance = iterator1.next()
     }
     
-    allset += (for (TypeAssertion(i, f) <- newSet.filterKeys(e => e match {
+    allset += (for (TypeAssertion(i, f) <- axiomMap.filterKeys(e => e match {
           													case TypeAssertion(x, _) => true
           													case _ => false
       								}).keySet) yield {f})
     // to calculate the expressions under the instance node y
-    for (TypeAssertion(a, c) ← newSet.filterKeys(e => e match {
+    for (TypeAssertion(a, c) ← axiomMap.filterKeys(e => e match {
           							case TypeAssertion(x, ForAll(r,_)) => true
           							case TypeAssertion(x, Exists(r, f)) => true
           							case _ => false
       								}).keySet) {
        c match {
-              //case Exists(role, form) ⇒ subset += form ; newSet = newSet.updated(TypeAssertion(a, c), true)
-              case ForAll(r, form) ⇒ subset += form ; newSet = newSet.updated(TypeAssertion(a, c), true)
+              //case Exists(role, form) ⇒ subset += form ; axiomMap = axiomMap.updated(TypeAssertion(a, c), true)
+              case ForAll(r, form) ⇒ subset += form ; axiomMap = axiomMap.updated(TypeAssertion(a, c), true)
               case _                  ⇒ Unit
       }
     }
     subset += f
-    newSet = newSet.updated(TypeAssertion(x, Exists(r, f)), true)
+    axiomMap = axiomMap.updated(TypeAssertion(x, Exists(r, f)), true)
     //to check blocking
     val iterator2 = allset.iterator
     var breakflag = false
@@ -361,23 +395,23 @@ class OptimizedTableau {
     	  breakflag = true
       } 
     }
-    //if not blocked, to add all expressions with instance y into newSet
+    //if not blocked, to add all expressions with instance y into axiomMap
     if (!blocked) {
           currentNode = Tree.insert(currentNode, RoleAssertion(r, x, y))
           instanceSet += y
-          newSet += (RoleAssertion(r, x, y) -> false)         
-          if (this.onto != null) { 
-        	  currentNode = Tree.insert(currentNode, TypeAssertion(y, this.onto))
-        	  newSet += (TypeAssertion(y, this.onto) -> false)
+          axiomMap += (RoleAssertion(r, x, y) -> false)         
+          if (this.tbox != null) { 
+        	  currentNode = Tree.insert(currentNode, TypeAssertion(y, this.tbox))
+        	  axiomMap += (TypeAssertion(y, this.tbox) -> false)
           }
           for (e ← subset) {
-    		  if ((e.isInstanceOf[Concept] || e.isInstanceOf[Not]) && (newSet.keySet).contains((TypeAssertion(y, nnf(Not(e)))))){
+    		  if ((e.isInstanceOf[Concept] || e.isInstanceOf[Not]) && (axiomMap.keySet).contains((TypeAssertion(y, nnf(Not(e)))))){
     		    clash = true
     		    currentNode = Tree.insert(currentNode, TypeAssertion(y, e))
     		    //Tree.insert(currentNode, TypeAssertion(y,Bottom))
     		  } 
     		  else {
-    			newSet += (TypeAssertion(y, e) -> false)
+    			axiomMap += (TypeAssertion(y, e) -> false)
     			currentNode = Tree.insert(currentNode, TypeAssertion(y,e))
     		  }
     	  }
@@ -394,13 +428,13 @@ class OptimizedTableau {
           case Concept(_) ⇒ true
           case Not(_)     ⇒ true
           case _          ⇒ false
-        }) && (newSet contains TypeAssertion(x, nnf(Not(element))))) {
+        }) && (axiomMap contains TypeAssertion(x, nnf(Not(element))))) {
           clash = true
           currentNode = Tree.insert(currentNode, TypeAssertion(x, element))
           //Tree.insert(currentNode,TypeAssertion(x, Bottom))
           return Unit
         } else {
-          newSet += (TypeAssertion(x, element) -> false)
+          axiomMap += (TypeAssertion(x, element) -> false)
           currentNode = Tree.insert(currentNode,TypeAssertion(x, element))
         }
       }
@@ -424,6 +458,23 @@ class OptimizedTableau {
     return list.reverse
   }
   
+    
+  private def getOrSet(s: Set[Axiom]): Set[TypeAssertion] = {
+    val orSet: Set[Axiom] = s.filter(e => e match {
+       									case TypeAssertion(_, Or(_)) ⇒ true
+       									case _                       ⇒ false 
+    								});
+    // TODO find other solution than type-casting
+    return orSet.asInstanceOf[Set[TypeAssertion]]
+  }
+  
+  //check if these two instances are equal
+  private def checkEqual(ind1: Ind, ind2: Ind): Boolean = {
+    var equal = true
+    notEqInstance.foreach(e => if (Set(ind1,ind2).subsetOf(e)) return false)
+    return equal
+  }
+  
     private def removeRedudantOr(expr: Expr): List[Expr] = {
     var list = List[Expr]()
     expr match {
@@ -437,6 +488,48 @@ class OptimizedTableau {
       case _ => Unit
     }
     return list.reverse
+  }
+    
+  private def checkCardinality(): Boolean = {
+    var maxCdnSet = axiomMap.filter(e => (e._1 match {
+          									  case TypeAssertion(_, maxCardinality(_, _, _)) => true
+          						    		  case _ => false
+        								})).keySet
+    var minCdnSet = axiomMap.filter(e => (e._1 match {
+          									  case TypeAssertion(_, minCardinality(_, _, _)) => true
+          						    		  case _ => false
+        								})).keySet
+    var maxIterator: Iterator[Axiom] = maxCdnSet.iterator
+    var minIterator: Iterator[Axiom] = minCdnSet.iterator
+    var maxbreak = false
+    var minbreak = false
+    var Cardinality : TypeAssertion = null
+    var CdnExpr : maxCardinality = null
+    while (maxIterator.hasNext && !maxbreak) {
+      //a rule for expressions such as ≤nR.A ⊓ ≤nR.¬A
+      maxIterator.next() match {
+        case TypeAssertion(x1, max: maxCardinality) =>
+          if (axiomMap.keySet.contains((TypeAssertion(x1, maxCardinality(max.n, max.r, Not(max.f)))))) {
+        	  clash = true 
+        	  maxbreak = true
+          } else {
+            //a rule for {((x :≥ mR), (x :≤ nR)} and n < m
+            while (minIterator.hasNext && !minbreak) {
+              minIterator.next() match {
+                case TypeAssertion(x2, min: minCardinality) =>
+                  if (min.n > max.n && x1.equals(x2) && max.r.equals(min.r) && max.f.equals(min.f)){
+                    clash = true
+                    minbreak = true
+                    maxbreak = true
+                  }
+                case _ => Unit
+              }
+            }
+          }
+        case _ => Unit
+      }
+    }
+    return clash
   }
 
 }
