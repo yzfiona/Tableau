@@ -5,6 +5,7 @@ import tableau.Internalization.internalize
 import datastructure.NTree
 import datastructure.TreeNode
 import model.Ontology
+import dk.brics.automaton.Automaton
 //import scala.util.control.Breaks._
 
 class OptimizedTableau {
@@ -56,6 +57,7 @@ class OptimizedTableau {
       for (axiom <- this.onto.ABox) {
         axiomMap += (axiom -> false)
         axiom match {
+          case RegExprClass(_,_) => Unit
           case TypeAssertion(ind, expr) => instanceSet += ind
           case RoleAssertion(r, ind1, ind2) => instanceSet = instanceSet ++ Set(ind1,ind2)
           case NotEquivalentIndividual(ind1, ind2) => 
@@ -80,6 +82,7 @@ class OptimizedTableau {
           case RoleAssertion(r, a, b)  ⇒ Unit
           case TypeAssertion(a, Or(c)) ⇒ Unit
           case NotEquivalentIndividual(_,_) => Unit
+          case RegExprClass(_,_) => Unit
           case TypeAssertion(a, maxCardinality(n, r, f)) => Unit
           case TypeAssertion(a, c)     ⇒ 
           	Tableau(a, c)
@@ -91,6 +94,7 @@ class OptimizedTableau {
     		  					 (e._1 match {
     		  						case TypeAssertion(_, Or(_)) => false
     		  						case TypeAssertion(_, maxCardinality(_, _, _)) => false
+    		  						case RegExprClass(_,_) => false
     		  						case RoleAssertion(_, _, _) => false
     		  						case _ => true
     		  					 }))
@@ -114,12 +118,20 @@ class OptimizedTableau {
         	  }
         	  else if (!clash) */analyzemaxCardinality(x, expr.n, expr.r, expr.f) 
           }
-        } else model += axiomMap.keySet       
+        }
+        if(!clash) {
+          untestedSet = axiomMap.filter(e =>e._1 match {
+          									case RegExprClass(_, _) => true
+          						    		case _ => false
+        							   })
+          if (untestedSet.size != 0) analyzeRegExpr(untestedSet.keySet)
+        }     
+        if (!clash) model += axiomMap.keySet
       }      
     }
     if (clash) println("clash")
     else println("model: " + model)
-    Tree.print();
+   // Tree.print();
 
     return (clash, model)
   }
@@ -195,6 +207,13 @@ class OptimizedTableau {
             	}
           }          
         }
+        if (!clash) {
+          var untestedSet = axiomMap.filter(e =>e._1 match {
+          									case RegExprClass(_, _) => true
+          						    		case _ => false
+        							   }).keySet
+          if (untestedSet.size != 0) analyzeRegExpr(untestedSet)
+        }
         if (clash) i += 1
         axiomMap = oldmap
         currentNode = BranchNode
@@ -206,7 +225,41 @@ class OptimizedTableau {
     }
   }
   
-  private def analyzeminCardinality(x: Ind, n: Integer, r: Role, f: Expr): Unit = {
+  private def analyzeRegExpr(RegSet: Set[Axiom]) {
+    var ConAstSet = axiomMap.filter(e =>e._1 match {
+          									case TypeAssertion(_, Concept(_)) => true
+          						    		case _ => false
+        							   }).keySet
+    var ConceptMap: Map[Ind, Set[Concept]] = Map()
+    var RegMap: Map[Concept, String] = (for (RegExprClass(c, regExpr) <- RegSet) yield {(c->regExpr)}).toMap
+    for (TypeAssertion(x, c: Concept) <- ConAstSet) {
+      if (RegMap.get(c) != None) {
+        var Element = ConceptMap.get(x)
+        if (Element == None) ConceptMap += (x -> Set(c))
+        else {
+          ConceptMap = ConceptMap.updated(x, Element.get + c)
+        }
+      }
+    }
+    var ConIterator = ConceptMap.valuesIterator
+    var break = false
+    while(ConIterator.hasNext && !break) {
+      var s = ConIterator.next()
+      var RegIterator = s.iterator
+      var Con = RegIterator.next()
+      var Automata = (new dk.brics.automaton.RegExp(RegMap.get(Con).get)).toAutomaton()
+      while(RegIterator.hasNext) {
+        Con = RegIterator.next()
+        Automata = Automata.intersection((new dk.brics.automaton.RegExp(RegMap.get(Con).get)).toAutomaton())
+      }
+      if (Automata.isEmpty()) {
+        clash = true
+        break = true
+      }
+    }
+  }
+  
+  private def analyzeminCardinality(x: Ind, n: Integer, r: Role, f: Expr) {
     var roleSet: Map[Axiom, Boolean] = Map()
     if (f.equals(Top)) {
       roleSet = axiomMap.filterKeys(e => e match {

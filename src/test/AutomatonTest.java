@@ -45,6 +45,15 @@ public class AutomatonTest {
 	}
 	
 	@Test
+	public void EmptyTest() {
+		RegExp r1 = new RegExp("ab");
+		RegExp r2 = new RegExp("(c|d)*");
+		Automaton a = r1.toAutomaton().intersection(r2.toAutomaton());
+		String s = "abcccdc";
+		assertTrue(a.isEmpty());
+	}
+	
+	@Test
 	public void ComplementTest() {
 		RegExp r = new RegExp("(c|d)*");
 		Automaton a = r.toAutomaton().complement();

@@ -175,11 +175,18 @@ class optimizedTableauTest {
     val axiom = new minCardinality(2, Role("hatChild"),  Concept("Children")) and Not(Exists(Role("hatChild"), Concept("Daughter"))) and Not(Exists(Role("hatChild"), Concept("Son")))
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto)
     assertTrue(tableauR._1)
-  }*/
+  }
   
     @Test def testInstance(){
 	val onto : Ontology = new Ontology(Set(TypeAssertion(Ind("y"),Concept("Man")), TypeAssertion(Ind("z"),Concept("Man")), RoleAssertion(Role("R"),Ind("x"), Ind("y")), RoleAssertion(Role("R"),Ind("x"), Ind("z"))))
     val axiom = TypeAssertion(Ind("x"), maxCardinality(1, Role("R"),  Concept("Man")))
+    val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto) //Set(EquivalentIndividual(Ind("y"),Ind("z")), 
+    assertTrue(tableauR._1)
+  }*/
+    
+    @Test def testRegExpr(){
+	val onto : Ontology = new Ontology(Set(TypeAssertion(Ind("x"),Concept("C")), TypeAssertion(Ind("x"),Concept("D")),RegExprClass(Concept("C"), "a*b")))
+    val axiom = RegExprClass(Concept("D"), "c")
     val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto) //Set(EquivalentIndividual(Ind("y"),Ind("z")), 
     assertTrue(tableauR._1)
   }

@@ -73,7 +73,7 @@ case class RoleAssertion(r: Role, a: Ind, b: Ind) extends ABoxAxiom {
   def toConcept = ⊥ // FIXME find other solution (use nominals?)
 }
 case class NotEquivalentIndividual(a: Ind, b: Ind) extends ABoxAxiom
-
+case class RegExprClass(c: Concept, regExpr: String) extends ABoxAxiom 
 
 
 //case class InvRoleAssertion(r: Role, s: Role) extends RoleExpr
