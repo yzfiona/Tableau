@@ -62,7 +62,9 @@ public class NTree {
 	private TreeNode findNextAncestor(TreeNode AncestorNode) {
 		// TODO Auto-generated method stub
 		TreeNode NextAncestorNode = AncestorNode, ParentNode = AncestorNode.getParent();
-		int count = 0, index = ParentNode.getChildren().indexOf(AncestorNode);
+		int count = 0, index = 0;
+		if (ParentNode == null) ParentNode = AncestorNode;
+		else index = ParentNode.getChildren().indexOf(AncestorNode);
 		boolean notFinish = true;
 		while(ParentNode.getChildren().size() <= index + 1 && !ParentNode.equals(root)) {
 			TreeNode temp = ParentNode;
