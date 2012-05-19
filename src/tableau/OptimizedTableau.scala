@@ -12,15 +12,9 @@ class OptimizedTableau {
 
   private var counter: Int = 0
   private def nextInd(): Ind = { counter += 1; return Ind("x" + counter) }
-  //private var instanceSet: Set[Ind] = Set[Ind]()
-  //private var notEqInstance : Set[Set[Ind]] = Set[Set[Ind]]()
-
-  //private var clash: Boolean = false
-  //private var model = Set[Set[Axiom]]()
-  //private var axiomMap: Map[Axiom, Boolean] = Map()
   
-  private var tbox : Expr = null
-  private var onto : Ontology = null
+  //private var tbox : Expr = null
+  //private var onto : Ontology = null
   
   private var Tree = new NTree()
   private var currentNode : TreeNode = null
@@ -30,18 +24,22 @@ class OptimizedTableau {
   }
   
   def isSatisfiable(axiom: ABoxAxiom, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
-    this.tbox = And(removeRedudantAnd(NNF.nnf(internalize(onto.TBox))))
-    this.onto = onto.addAxiom(axiom)
-    return isSatisfiable(internalize(onto.TBox))
+    var tbox = And(removeRedudantAnd(NNF.nnf(internalize(onto.TBox))))
+    var ontology = onto.addAxiom(axiom)
+    return initial(internalize(onto.TBox), tbox, ontology)
   }
   
   def isSatisfiable(expr: Expr, onto : Ontology): (Boolean, Set[Set[Axiom]]) = {
-    this.tbox = And(removeRedudantAnd(NNF.nnf(internalize(onto.TBox))))
-    this.onto = onto
-    return isSatisfiable(internalize(onto.TBox) and expr)
+    var tbox = And(removeRedudantAnd(NNF.nnf(internalize(onto.TBox))))
+    var ontology = onto
+    return initial(internalize(onto.TBox) and expr, tbox, ontology)
   }
-
+    
   def isSatisfiable(expr: Expr): (Boolean, Set[Set[Axiom]]) = {
+	  initial(expr, null, null)
+  }
+  
+  private def initial(expr: Expr, tbox: Expr, onto: Ontology): (Boolean, Set[Set[Axiom]]) = {
     var axiomMap: Map[Axiom, Boolean] = Map()
     var instanceSet: Set[Ind] = Set[Ind]()
     var notEqInstance : Set[Set[Ind]] = Set[Set[Ind]]()
@@ -60,8 +58,8 @@ class OptimizedTableau {
       currentNode = Tree.getRoot()
     }
  
-    if (this.onto != null) {
-      for (axiom <- this.onto.ABox) {
+    if (onto != null) {
+      for (axiom <- onto.ABox) {
         axiomMap += (axiom -> false)
         if (currentNode != null) currentNode = Tree.insert(currentNode, axiom)
         else {
@@ -80,7 +78,7 @@ class OptimizedTableau {
         }
       }
     }
-    val tableauInfo : TableauInfo = (instanceSet, notEqInstance, axiomMap, false, Set[Set[Axiom]](), this.tbox)
+    val tableauInfo : TableauInfo = (instanceSet, notEqInstance, axiomMap, false, Set[Set[Axiom]](), tbox, onto)
     return TableauProof(tableauInfo)
   }
 
