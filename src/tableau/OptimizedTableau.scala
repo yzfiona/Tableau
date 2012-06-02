@@ -70,6 +70,7 @@ class OptimizedTableau {
           case RegExprClass(_,_) => Unit
           case TypeAssertion(ind, expr) => instanceSet += ind
           case RoleAssertion(r, ind1, ind2) => instanceSet = instanceSet ++ Set(ind1,ind2)
+          case RoleDataAssertion(r, ind, str) => instanceSet += ind
           case NotEquivalentIndividual(ind1, ind2) => 
             	instanceSet = instanceSet ++ Set(ind1,ind2)
             	var set = notEqInstance.find( e => e.contains(ind1) && e.contains(ind2))
@@ -111,6 +112,7 @@ class OptimizedTableau {
     		  						case TypeAssertion(_, maxCardinality(_, _, _)) => false
     		  						case RegExprClass(_,_) => false
     		  						case RoleAssertion(_, _, _) => false
+    		  						case RoleDataAssertion(_, _, _) => false
     		  						case _ => true
     		  					 }))
          
@@ -206,6 +208,7 @@ class OptimizedTableau {
         		  					case TypeAssertion(_, Or(_)) => false
         		  					case TypeAssertion(_, maxCardinality(_, _, _)) => false
         		  					case RoleAssertion(_, _, _) => false
+        		  					case RoleDataAssertion(_, _, _) => false
         		  					case _ => true
         		  				})).keySet
         } while (andSet.size != 0 && !clash)

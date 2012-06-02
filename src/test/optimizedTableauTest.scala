@@ -174,4 +174,12 @@ class optimizedTableauTest {
     assertTrue(tableauR._1)
   }
   
+    @Test def tesAdrMatch(){
+	val onto : Ontology = new Ontology(Set(TypeAssertion(Ind("x1"),Concept("Zip")), RoleDataAssertion(Role("Label"), Ind("x1"), "12345"),
+	    TypeAssertion(Ind("x2"),Concept("Address")), RoleDataAssertion(Role("Label"), Ind("x2"), "123 str")))
+    val axiom = RoleAssertion(Role("followedBy"), Ind("x1"), Ind("x2"))
+    val tableauR = new OptimizedTableau().isSatisfiable(axiom, onto) //Set(EquivalentIndividual(Ind("y"),Ind("z")), 
+    assertTrue(!tableauR._1)
+  }
+  
 }
